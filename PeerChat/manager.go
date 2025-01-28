@@ -40,16 +40,61 @@ func newManager(ctx context.Context) *Manager {
 func (m *Manager) setupEventHandlers() {
 	m.handlers[EventSendMessage] = SendMessage
 	m.handlers[EventChangeRoom] = ChatRoomHandler
+	m.handlers[EventUserJoin] = handleUserJoin
 }
 
 func ChatRoomHandler(event Event, c *Client) error {
 	var changeRoomEvent ChangeRoomEvent
 
 	if err := json.Unmarshal(event.Payload, &changeRoomEvent); err != nil {
-		return fmt.Errorf("Bad payload in request: %v", err)
+		return fmt.Errorf("bad payload in request: %v", err)
 	}
 
+	// Store old room to avoid sending join message to it
+	oldRoom := c.chatroom
+
+	// Update client's room
 	c.chatroom = changeRoomEvent.Name
+
+	log.Printf("User changing room from %s to %s", oldRoom, c.chatroom)
+
+	// Create join message
+	joinEvent := UserJoinEvent{
+		Username: "User", // You can modify this if you track usernames
+		Room:     c.chatroom,
+		JoinedAt: time.Now(),
+	}
+
+	data, err := json.Marshal(joinEvent)
+	if err != nil {
+		log.Printf("failed to marshal join event: %v", err)
+		return err
+	}
+
+	outgoingEvent := Event{
+		Type:    EventUserJoin,
+		Payload: data,
+	}
+
+	log.Printf("Broadcasting join message to room: %s", c.chatroom)
+
+	// Broadcast to all clients in the new room
+	clientCount := 0
+	for client := range c.manager.clients {
+		if client.chatroom == c.chatroom && client != c {
+			clientCount++
+			go func(client *Client) {
+				select {
+				case client.egress <- outgoingEvent:
+					log.Printf("Successfully sent join message to a client in room %s", client.chatroom)
+				case <-time.After(time.Second):
+					log.Printf("Timeout sending join message to client in room %s", client.chatroom)
+				}
+			}(client)
+		}
+	}
+	log.Printf("Attempted to send join message to %d clients in room %s", clientCount, c.chatroom)
+
 	return nil
 }
 
@@ -79,6 +124,15 @@ func SendMessage(event Event, c *Client) error {
 		if client.chatroom == c.chatroom {
 			client.egress <- outgoingEvent
 		}
+	}
+
+	return nil
+}
+
+func handleUserJoin(event Event, c *Client) error {
+	var joinEvent UserJoinEvent
+	if err := json.Unmarshal(event.Payload, &joinEvent); err != nil {
+		return fmt.Errorf("bad payload in request: %v", err)
 	}
 
 	return nil
@@ -139,7 +193,7 @@ func (m *Manager) loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Username == "ardhi" && req.Password == "123" {
+	if req.Password == "123" {
 		type response struct {
 			OTP string `json:"otp"`
 		}
@@ -165,9 +219,8 @@ func (m *Manager) loginHandler(w http.ResponseWriter, r *http.Request) {
 func (m *Manager) addClient(client *Client) {
 	m.Lock()
 	defer m.Unlock()
-
 	m.clients[client] = true
-
+	log.Println("New client connected and registered")
 }
 
 func (m *Manager) removeClient(client *Client) {
