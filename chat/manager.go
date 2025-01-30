@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -40,20 +42,245 @@ func newManager(ctx context.Context) *Manager {
 func (m *Manager) setupEventHandlers() {
 	m.handlers[EventSendMessage] = SendMessage
 	m.handlers[EventChangeRoom] = ChatRoomHandler
+	m.handlers[EventJoinRoom] = JoinRoomHandler
+	// m.handlers[EventRoomInfo] = RoomInfoHandler
+	// m.handlers[EventNewPeer] = NewPeerHandler
+	m.handlers[EventOffer] = OfferHandler
+	m.handlers[EventAnswer] = AnswerHandler
+	m.handlers[EventIceCandidate] = IceCandidateHandler
+}
+
+func IceCandidateHandler(event Event, c *Client) error {
+	var iceCandidateEvent IceCandidateEvent
+
+	if err := json.Unmarshal(event.Payload, &iceCandidateEvent); err != nil {
+		return fmt.Errorf("")
+	}
+
+	iceCandidateEvent.From = c.Username
+
+	data, err := json.Marshal(iceCandidateEvent)
+	if err != nil {
+		return fmt.Errorf("failed to marshal broadcast message: %v", err)
+	}
+
+	outgoingEvent := Event{
+		Payload: data,
+		Type:    EventIceCandidate,
+	}
+
+	for client := range c.manager.clients {
+		if client.chatroom == c.chatroom && client.Username == iceCandidateEvent.To {
+			client.egress <- outgoingEvent
+		}
+	}
+
+	return nil
+}
+
+func AnswerHandler(event Event, c *Client) error {
+	var answerEvent AnswerEvent
+
+	if err := json.Unmarshal(event.Payload, &answerEvent); err != nil {
+		return fmt.Errorf("")
+	}
+
+	answerEvent.From = c.Username
+
+	data, err := json.Marshal(answerEvent)
+	if err != nil {
+		return fmt.Errorf("failed to marshal broadcast message: %v", err)
+	}
+
+	outgoingEvent := Event{
+		Payload: data,
+		Type:    EventAnswer,
+	}
+
+	for client := range c.manager.clients {
+		if client.chatroom == c.chatroom && client.Username == answerEvent.To {
+			client.egress <- outgoingEvent
+		}
+	}
+
+	return nil
+}
+
+func OfferHandler(event Event, c *Client) error {
+	var offerEvent OfferEvent
+
+	if err := json.Unmarshal(event.Payload, &offerEvent); err != nil {
+		return fmt.Errorf("")
+	}
+
+	offerEvent.From = c.Username
+
+	data, err := json.Marshal(offerEvent)
+	if err != nil {
+		return fmt.Errorf("failed to marshal broadcast message: %v", err)
+	}
+
+	outgoingEvent := Event{
+		Payload: data,
+		Type:    EventOffer,
+	}
+
+	for client := range c.manager.clients {
+		if client.chatroom == c.chatroom && client.Username == offerEvent.To {
+			client.egress <- outgoingEvent
+		}
+	}
+
+	return nil
+}
+
+// func NewPeerHandler(event Event, c *Client) error {
+// 	var newPeerEvent NewPeerEvent
+// 	if err := json.Unmarshal(event.Payload, &newPeerEvent); err != nil {
+// 		return fmt.Errorf("bad payload in request: %v", err)
+// 	}
+
+// 	data, err := json.Marshal(newPeerEvent)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to marshal broadcast message: %v", err)
+// 	}
+
+// 	outgoingEvent := Event{
+// 		Payload: data,
+// 		Type:    EventNewMessage,
+// 	}
+
+// 	for client := range c.manager.clients {
+// 		if client.chatroom == c.chatroom && client.Username == c.Username {
+// 			client.egress <- outgoingEvent
+// 		}
+// 	}
+
+// 	return nil
+// }
+
+// func RoomInfoHandler(event Event, c *Client) error {
+// 	var roomInfoEvent RoomInfoEvent
+// 	if err := json.Unmarshal(event.Payload, &roomInfoEvent); err != nil {
+// 		return fmt.Errorf("bad payload in request: %v", err)
+// 	}
+
+// 	return nil
+// }
+
+func JoinRoomHandler(event Event, c *Client) error {
+	var joinRoomEvent JoinRoomEvent
+	if err := json.Unmarshal(event.Payload, &joinRoomEvent); err != nil {
+		return fmt.Errorf("failed to unmarshal join room event: %v", err)
+	}
+
+	// Update client's room
+	c.chatroom = joinRoomEvent.Room
+
+	// Collect users in the room
+	var users []string
+	for client := range c.manager.clients {
+		if client.chatroom == c.chatroom {
+			users = append(users, client.Username)
+		}
+	}
+
+	// First event: Room Info
+	roomInfoEvent := RoomInfoEvent{
+		Type:  "room_info",
+		Room:  c.chatroom,
+		Users: users,
+	}
+
+	roomInfoData, err := json.Marshal(roomInfoEvent)
+	if err != nil {
+		return fmt.Errorf("failed to marshal room info event: %v", err)
+	}
+
+	outgoingRoomInfo := Event{
+		Type:    EventRoomInfo,
+		Payload: roomInfoData,
+	}
+
+	// Second event: New Peer
+	newPeerEvent := NewPeerEvent{
+		Type:   "new_peer",
+		Room:   c.chatroom,
+		UserId: c.Username,
+	}
+
+	newPeerData, err := json.Marshal(newPeerEvent)
+	if err != nil {
+		return fmt.Errorf("failed to marshal new peer event: %v", err)
+	}
+
+	outgoingNewPeer := Event{
+		Type:    "new_peer",
+		Payload: newPeerData,
+	}
+	timeout := time.After(5 * time.Second)
+	// Send both events to all clients in the room
+	for client := range c.manager.clients {
+		if client.chatroom == c.chatroom {
+			// Send events sequentially
+			select {
+			case client.egress <- outgoingRoomInfo:
+				// First event sent successfully
+			case <-timeout:
+				return fmt.Errorf("timeout sending room info event to client %s", client.ID)
+			}
+			if client.Username != newPeerEvent.UserId {
+				timeout = time.After(5 * time.Second)
+				select {
+				case client.egress <- outgoingNewPeer:
+					// Second event sent successfully
+				default:
+					return fmt.Errorf("failed to send new peer event to client %s", client.ID)
+				}
+
+			}
+
+		}
+	}
+
+	return nil
 }
 
 func ChatRoomHandler(event Event, c *Client) error {
 	var changeRoomEvent ChangeRoomEvent
 
 	if err := json.Unmarshal(event.Payload, &changeRoomEvent); err != nil {
-		return fmt.Errorf("Bad payload in request: %v", err)
+		return fmt.Errorf("bad payload in request: %v", err)
 	}
 
 	c.chatroom = changeRoomEvent.Name
+
+	var broadMessage NewMessageEvent
+	broadMessage.Sent = time.Now()
+	broadMessage.Message = "New User Join"
+	broadMessage.From = c.Username
+
+	data, err := json.Marshal(broadMessage)
+	if err != nil {
+		return fmt.Errorf("failed to marshal broadcast message: %v", err)
+	}
+
+	outgoingEvent := Event{
+		Payload: data,
+		Type:    EventNewMessage,
+	}
+
+	for client := range c.manager.clients {
+		if client.chatroom == c.chatroom {
+			client.egress <- outgoingEvent
+		}
+	}
+
 	return nil
 }
 
 func SendMessage(event Event, c *Client) error {
+
 	var chatevent SendMessageEvent
 	if err := json.Unmarshal(event.Payload, &chatevent); err != nil {
 		return fmt.Errorf("bad payload in request: %v", err)
@@ -116,8 +343,10 @@ func (m *Manager) serveWS(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		return
 	}
+	randomBytes := make([]byte, 32)
 
-	client := NewClient(conn, m)
+	random, _ := rand.Read(randomBytes)
+	client := NewClient(conn, m, otp, strconv.Itoa(random))
 
 	m.addClient(client)
 
