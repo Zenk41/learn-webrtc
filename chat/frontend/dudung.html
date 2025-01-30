@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>WebRTC Video Call</title>
+  <style>
+    .container {
+      margin: 20px;
+    }
+
+    textarea {
+      width: 500px;
+      height: 100px;
+      margin: 10px 0;
+    }
+
+    .videos {
+      display: flex;
+      gap: 20px;
+      margin: 20px 0;
+    }
+
+    video {
+      width: 400px;
+      height: 300px;
+      background: #333;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h2>WebRTC Video Call</h2>
+
+    <div class="videos">
+      <div>
+        <h3>Local Video</h3>
+        <video id="localVideo" autoplay playsinline muted></video>
+      </div>
+      <div>
+        <h3>Remote Video</h3>
+        <video id="remoteVideo" autoplay playsinline></video>
+      </div>
+    </div>
+
+    <button onclick="startVideo()">Start Video</button>
+
+    <h3>Step 1: Create and copy offer</h3>
+    <button onclick="createOffer()">Create Offer</button>
+    <textarea id="offerSdp" placeholder="Offer SDP will appear here"></textarea>
+
+    <h3>Step 2: Paste offer and create answer</h3>
+    <textarea id="receivedOffer" placeholder="Paste offer SDP here"></textarea>
+    <button onclick="createAnswer()">Create Answer</button>
+
+    <h3>Step 3: Copy and paste answer</h3>
+    <textarea id="answerSdp" placeholder="Answer SDP will appear here"></textarea>
+    <textarea id="receivedAnswer" placeholder="Paste answer SDP here"></textarea>
+    <button onclick="setAnswer()">Set Answer</button>
+  </div>
+
+  <script>
+    let peerConnection;
+    let localStream;
+
+    // Start local video
+    async function startVideo() {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true
+        });
+        document.getElementById('localVideo').srcObject = localStream;
+      } catch (error) {
+        console.error('Error accessing media devices:', error);
+      }
+    }
+
+    // Initialize peer connection
+    function initPeerConnection() {
+      peerConnection = new RTCPeerConnection({
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' }
+        ]
+      });
+
+      // Add local stream tracks to peer connection
+      if (localStream) {
+        localStream.getTracks().forEach(track => {
+          peerConnection.addTrack(track, localStream);
+        });
+      }
+
+      // Handle incoming remote stream
+      peerConnection.ontrack = event => {
+        if (event.streams && event.streams[0]) {
+          document.getElementById('remoteVideo').srcObject = event.streams[0];
+        }
+      };
+
+      peerConnection.onicecandidate = event => {
+        if (event.candidate === null) {
+          // ICE gathering completed, SDP is ready
+          const sdpTextarea = document.getElementById('offerSdp').value ?
+            document.getElementById('offerSdp') :
+            document.getElementById('answerSdp');
+          sdpTextarea.value = peerConnection.localDescription.sdp;
+        }
+      };
+
+      peerConnection.oniceconnectionstatechange = () => {
+        console.log("ICE Connection State:", peerConnection.iceConnectionState);
+      };
+    }
+
+    // Create offer
+    async function createOffer() {
+      if (!localStream) {
+        alert('Please start video first!');
+        return;
+      }
+
+      initPeerConnection();
+
+      try {
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+      } catch (error) {
+        console.error('Error creating offer:', error);
+      }
+    }
+
+    // Create answer
+    async function createAnswer() {
+      if (!localStream) {
+        alert('Please start video first!');
+        return;
+      }
+
+      initPeerConnection();
+      const receivedOffer = document.getElementById('receivedOffer').value;
+
+      try {
+        await peerConnection.setRemoteDescription({
+          type: 'offer',
+          sdp: receivedOffer
+        });
+
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+      } catch (error) {
+        console.error('Error creating answer:', error);
+      }
+    }
+
+    // Set answer
+    async function setAnswer() {
+      const receivedAnswer = document.getElementById('receivedAnswer').value;
+      try {
+        await peerConnection.setRemoteDescription({
+          type: 'answer',
+          sdp: receivedAnswer
+        });
+      } catch (error) {
+        console.error('Error setting answer:', error);
+      }
+    }
+  </script>
+</body>
+
+</html>
