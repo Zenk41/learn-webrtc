@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+  <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+  <title>PP - Websockets</title>
+</head>
+
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+  <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-2xl">
+    <h1 class="text-3xl font-bold text-center mb-4">Chat Application</h1>
+    <h3 id="chat-header" class="text-lg text-gray-700 text-center mb-2">Currently in chat: general</h3>
+    <h3 id="connection-header" class="text-lg text-gray-700 text-center mb-6">Connected to Websocket: false</h3>
+
+    <!-- Chatroom Selection Form -->
+    <form id="chatroom-selection" class="mb-6">
+      <label for="chatroom" class="block text-sm font-medium text-gray-700">Chatroom:</label>
+      <input type="text" id="chatroom" name="chatroom"
+        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+      <button type="submit"
+        class="mt-4 w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Change
+        chatroom</button>
+    </form>
+
+    <!-- Chat Messages Textarea -->
+    <textarea
+      class="messagearea w-full p-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm mb-6"
+      id="chatmessages" readonly name="chatmessages" rows="4"
+      placeholder="Welcome to the general chatroom, here messages from others will appear"></textarea>
+
+    <!-- Chat Message Form -->
+    <form id="chatroom-message" class="mb-6">
+      <label for="message" class="block text-sm font-medium text-gray-700">Message:</label>
+      <input type="text" id="message" name="message"
+        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+      <button type="submit"
+        class="mt-4 w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Send
+        message</button>
+    </form>
+
+    <!-- Login Form -->
+    <div class="border-t border-gray-200 pt-6">
+      <form id="login-form">
+        <label for="username" class="block text-sm font-medium text-gray-700">Username:</label>
+        <input type="text" id="username" name="username"
+          class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+
+        <label for="password" class="block text-sm font-medium text-gray-700 mt-4">Password:</label>
+        <input type="password" id="password" name="password"
+          class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+
+        <button type="submit"
+          class="mt-6 w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Login</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="roomchat.js"></script>
+</body>
+
+</html>
