@@ -41,6 +41,11 @@ func (m *Manager) setupEventHandlers() {
 	m.handlers[EventSendMessage] = SendMessage
 	m.handlers[EventChangeRoom] = ChatRoomHandler
 	m.handlers[EventUserJoin] = handleUserJoin
+	m.handlers[EventUserReady] = handleUserReady
+	m.handlers[EventOffer] = handleOffer
+	m.handlers[EventAnswer] = handleAnswer
+	m.handlers[EventICECandidate] = handleICECandidate
+
 }
 
 func ChatRoomHandler(event Event, c *Client) error {
@@ -77,6 +82,8 @@ func ChatRoomHandler(event Event, c *Client) error {
 	}
 
 	log.Printf("Broadcasting join message to room: %s", c.chatroom)
+
+	
 
 	// Broadcast to all clients in the new room
 	clientCount := 0
@@ -129,9 +136,45 @@ func SendMessage(event Event, c *Client) error {
 	return nil
 }
 
+func handleUserReady(event Event, c *Client) error {
+	var userReadyEvent UserReadyEvent
+	if err := json.Unmarshal(event.Payload, &userReadyEvent); err != nil {
+		return fmt.Errorf("bad payload in request: %v", err)
+	}
+
+	return nil
+}
+
+func handleAnswer(event Event, c *Client) error {
+	var answerEvent AnswerEvent
+	if err := json.Unmarshal(event.Payload, &answerEvent); err != nil {
+		return fmt.Errorf("bad payload in request: %v", err)
+	}
+
+	return nil
+}
+
+func handleICECandidate(event Event, c *Client) error {
+	var iceCandidateEvent IceCandidateEvent
+	if err := json.Unmarshal(event.Payload, &iceCandidateEvent); err != nil {
+		return fmt.Errorf("bad payload in request: %v", err)
+	}
+
+	return nil
+}
+
 func handleUserJoin(event Event, c *Client) error {
 	var joinEvent UserJoinEvent
 	if err := json.Unmarshal(event.Payload, &joinEvent); err != nil {
+		return fmt.Errorf("bad payload in request: %v", err)
+	}
+
+	return nil
+}
+
+func handleOffer(event Event, c *Client) error {
+	var offerEvent OfferEvent
+	if err := json.Unmarshal(event.Payload, &offerEvent); err != nil {
 		return fmt.Errorf("bad payload in request: %v", err)
 	}
 
