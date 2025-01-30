@@ -19,6 +19,9 @@ type ClientList map[*Client]bool
 type Client struct {
 	connection *websocket.Conn
 	manager    *Manager
+	// user identifier
+	ID       string
+	Username string
 
 	chatroom string
 
@@ -26,11 +29,13 @@ type Client struct {
 	egress chan Event
 }
 
-func NewClient(conn *websocket.Conn, manager *Manager) *Client {
+func NewClient(conn *websocket.Conn, manager *Manager, username, id string) *Client {
 	return &Client{
 		connection: conn,
 		manager:    manager,
-		egress:     make(chan Event),
+		ID:         id,
+		Username:   username,
+		egress:     make(chan Event, 256),
 	}
 }
 
@@ -45,7 +50,7 @@ func (c *Client) readMessages() {
 		return
 	}
 
-	c.connection.SetReadLimit(512)
+	// c.connection.SetReadLimit(512)
 
 	c.connection.SetPongHandler(c.pongHandler)
 
